@@ -192,8 +192,111 @@ const Pipeline = {
       AgentUI.setAgentStatus('agent14', 'complete',
         `${cioResult.scoreLabel} — Score: ${cioResult.scores.total}/60`);
 
+      // AGENT 4 — Quant Researcher (Phase 4)
+      AgentUI.setAgentStatus('agent4', 'running', 'Statistical validation...');
+      const quantResult = await Pipeline.callAgent(
+        'agent4',
+        AGENT_PROMPTS_P4.quantResearcher,
+        {
+          task: 'quant_validation',
+          ticker: topCandidate.ticker,
+          researchResult,
+          quote: marketData.quotes[topCandidate.ticker],
+          accountValue: portfolio.currentValue,
+          existingPositions: portfolio.positions
+        },
+        prefs.workerUrl
+      );
+      results.agents.agent4 = quantResult;
+      AgentUI.setAgentStatus('agent4', 'complete',
+        `Quant Score: ${quantResult.quantScore}/10 | ${quantResult.recommendation}`);
+
+      // AGENT 16 — Options Specialist (Phase 4 — if options setup)
+      AgentUI.setAgentStatus('agent16', 'running', 'Options analysis...');
+      const optionsResult = await Pipeline.callAgent(
+        'agent16',
+        AGENT_PROMPTS_P4.optionsSpecialist,
+        {
+          task: 'options_analysis',
+          ticker: topCandidate.ticker,
+          quote: marketData.quotes[topCandidate.ticker],
+          researchResult,
+          macroRegime: macroResult.regime,
+          accountValue: portfolio.currentValue
+        },
+        prefs.workerUrl
+      );
+      results.agents.agent16 = optionsResult;
+      AgentUI.setAgentStatus('agent16', 'complete',
+        `Strategy: ${optionsResult.recommendedStrategy} | Score: ${optionsResult.optionsScore}/10`);
+
+      // AGENT 6 — Compliance (Phase 4)
+      AgentUI.setAgentStatus('agent6', 'running', 'Compliance check...');
+      const complianceResult = await Pipeline.callAgent(
+        'agent6',
+        AGENT_PROMPTS_P4.complianceOfficer,
+        {
+          task: 'compliance_check',
+          ticker: topCandidate.ticker,
+          macroClassified: true,
+          sectorEvaluated: true,
+          riskManagerApproved: riskResult.decision === 'APPROVED',
+          positionSize: riskResult.recommendedPositionDollar,
+          accountValue: portfolio.currentValue,
+          stopLoss: cioResult.tradeAlert?.stopLoss,
+          target: cioResult.tradeAlert?.target,
+          riskReward: cioResult.tradeAlert?.riskReward,
+          totalScore: cioResult.scores.total
+        },
+        prefs.workerUrl
+      );
+      results.agents.agent6 = complianceResult;
+      AgentUI.setAgentStatus('agent6', 'complete',
+        complianceResult.compliant ? 'COMPLIANT' : `VIOLATION: ${complianceResult.violations?.[0]}`);
+
+      // AGENT 7 — Execution Specialist (Phase 4)
+      AgentUI.setAgentStatus('agent7', 'running', 'Order structuring...');
+      const executionResult = await Pipeline.callAgent(
+        'agent7',
+        AGENT_PROMPTS_P4.executionSpecialist,
+        {
+          task: 'structure_order',
+          ticker: topCandidate.ticker,
+          quote: marketData.quotes[topCandidate.ticker],
+          positionDollar: riskResult.recommendedPositionDollar,
+          accountValue: portfolio.currentValue,
+          tradeAlert: cioResult.tradeAlert,
+          optionsResult
+        },
+        prefs.workerUrl
+      );
+      results.agents.agent7 = executionResult;
+      AgentUI.setAgentStatus('agent7', 'complete',
+        `${executionResult.orderType} @ $${executionResult.limitPrice} | Risk: ${Utils.formatCurrency(executionResult.maxRisk)}`);
+
+      // AGENT 17 — Strategy Director (Phase 4)
+      AgentUI.setAgentStatus('agent17', 'running', 'Strategy review...');
+      const strategyResult = await Pipeline.callAgent(
+        'agent17',
+        AGENT_PROMPTS_P4.strategyDirector,
+        {
+          task: 'strategy_review',
+          accountValue: portfolio.currentValue,
+          startingCapital: portfolio.startingCapital,
+          tradeHistory: Storage.getTradeLog().slice(0, 20),
+          strategyPerformance: Storage.getStrategyPerf(),
+          agentResults: { macroResult, researchResult, quantResult, riskResult, cioResult }
+        },
+        prefs.workerUrl
+      );
+      results.agents.agent17 = strategyResult;
+      AgentUI.setAgentStatus('agent17', 'complete',
+        `System: ${strategyResult.systemHealth} | Progress: ${strategyResult.smallAccountProgress?.progressPercent?.toFixed(1)}%`);
+
       // Set final recommendation
       results.finalRecommendation = cioResult;
+      results.executionPlan = executionResult;
+      results.optionsAnalysis = optionsResult;
       results.status = 'awaiting_approval';
 
       // Store results
