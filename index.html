@@ -19,7 +19,7 @@
         <span class="logo-text">ATIS</span>
       </div>
       <div class="header-meta">
-        <span class="phase-badge">PHASE 1 — RESEARCH</span>
+        <span class="phase-badge">PHASE 2 — PAPER TRADING</span>
         <span class="separator">|</span>
         <span class="system-time" id="systemTime">--:-- --</span>
       </div>
@@ -288,21 +288,131 @@
     <!-- TAB: SCANNER -->
     <section class="tab-panel" id="tab-scanner">
       <div class="panel-header">
-        <h2 class="panel-title">Scanner</h2>
+        <h2 class="panel-title">Options Scanner</h2>
         <div class="panel-actions">
-          <span class="phase-note">Agents active in Phase 3</span>
+          <span class="phase-badge" style="background:rgba(0,230,118,0.1);border-color:var(--green);color:var(--green)">PHASE 2 — LIVE</span>
         </div>
       </div>
-      <div class="coming-soon-block">
-        <div class="coming-soon-icon">◈</div>
-        <div class="coming-soon-title">Agent Pipeline</div>
-        <div class="coming-soon-text">The 17-agent analysis pipeline will be built in Phase 3. Complete the data infrastructure in Phase 1–2 first.</div>
-        <div class="coming-soon-phases">
-          <span class="phase-chip phase-chip--active">Phase 1: Data ←</span>
-          <span class="phase-chip">Phase 2: Portfolio</span>
-          <span class="phase-chip">Phase 3: Agents</span>
+
+      <!-- Sub-tabs -->
+      <div class="scanner-tabs">
+        <button class="scanner-tab active" data-view="scan">Scan</button>
+        <button class="scanner-tab" data-view="positions">Open Positions</button>
+        <button class="scanner-tab" data-view="history">Trade History</button>
+        <button class="scanner-tab" data-view="stats">Performance</button>
+      </div>
+
+      <!-- VIEW: SCAN -->
+      <div class="scanner-view" id="scanner-view-scan">
+        <!-- Paper Portfolio Banner -->
+        <div class="paper-banner">
+          <div class="paper-banner-item">
+            <span class="paper-label">PAPER ACCOUNT</span>
+            <span class="paper-value" id="paperValue">$10,000.00</span>
+          </div>
+          <div class="paper-banner-divider"></div>
+          <div class="paper-banner-item">
+            <span class="paper-label">Cash Available</span>
+            <span class="paper-value" id="paperCash">$10,000.00</span>
+          </div>
+          <div class="paper-banner-divider"></div>
+          <div class="paper-banner-item">
+            <span class="paper-label">Total P&L</span>
+            <span class="paper-value" id="paperTotalPL">$0.00</span>
+          </div>
+          <div class="paper-banner-divider"></div>
+          <div class="paper-banner-item">
+            <span class="paper-label">Open Positions</span>
+            <span class="paper-value" id="paperOpenPos">0</span>
+          </div>
+        </div>
+
+        <!-- Scan Controls -->
+        <div class="scan-controls">
+          <div class="scan-single">
+            <input type="text" id="singleTickerInput" class="input-ticker" placeholder="Single ticker..." maxlength="6" />
+            <button class="btn btn--secondary" id="scanTickerBtn">▶</button>
+          </div>
+          <button class="btn btn--primary" id="runScanBtn">▶ Scan Watchlist</button>
+        </div>
+
+        <div class="scan-note">
+          IV is estimated using Black-Scholes with 30% baseline. Connect a paid options data provider in Phase 4 for live Greeks.
+        </div>
+
+        <!-- Results -->
+        <div id="scanResults">
+          <div class="empty-scan">Run a scan to see options setups from your watchlist.</div>
         </div>
       </div>
+
+      <!-- VIEW: OPEN POSITIONS -->
+      <div class="scanner-view" id="scanner-view-positions" style="display:none">
+        <div class="section-block">
+          <div class="section-label">OPEN PAPER POSITIONS</div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Ticker</th><th>Type</th><th>Strike</th>
+                  <th>Expiry</th><th>Qty</th><th>Entry</th><th>Current</th>
+                  <th>Unreal. P&L</th><th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="paperPositionsBody">
+                <tr class="empty-row"><td colspan="10">No open paper positions.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW: HISTORY -->
+      <div class="scanner-view" id="scanner-view-history" style="display:none">
+        <div class="section-block">
+          <div class="section-label">PAPER TRADE HISTORY</div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Date</th><th>Ticker</th><th>Type</th>
+                  <th>Contract</th><th>Entry → Exit</th><th>P&L $</th><th>P&L %</th><th>Result</th>
+                </tr>
+              </thead>
+              <tbody id="paperHistoryBody">
+                <tr class="empty-row"><td colspan="9">No closed paper trades yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW: STATS -->
+      <div class="scanner-view" id="scanner-view-stats" style="display:none">
+        <div class="section-label">PAPER TRADING PERFORMANCE</div>
+        <div class="card-grid card-grid--4">
+          <div class="stat-card">
+            <div class="stat-label">Total Trades</div>
+            <div class="stat-value" id="paperTrades">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Win Rate</div>
+            <div class="stat-value" id="paperWinRate">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Profit Factor</div>
+            <div class="stat-value" id="paperPF">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Expectancy</div>
+            <div class="stat-value" id="paperExpectancy">—</div>
+          </div>
+        </div>
+        <div class="notes-block" style="margin-top:16px">
+          Paper trade at least 20 options plays before risking real money. Track your win rate, average win/loss, and whether your thesis is consistently right. The goal is to prove a repeatable edge before committing capital.
+        </div>
+      </div>
+
     </section>
 
     <!-- TAB: PORTFOLIO -->
@@ -638,6 +748,110 @@
     </div>
   </div>
 
+  <!-- MODAL: Paper Trade Entry -->
+  <div class="modal-overlay" id="paperTradeModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Paper Trade — <span id="ptTicker">—</span> <span id="ptType" style="color:var(--cyan)">—</span></h3>
+        <button class="modal-close" id="paperTradeModalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Contract Summary -->
+        <div class="pt-summary">
+          <div class="pt-row">
+            <div class="pt-field"><span class="pt-label">Strike</span><span class="pt-val" id="ptStrike">—</span></div>
+            <div class="pt-field"><span class="pt-label">Expiry</span><span class="pt-val" id="ptExpiry">—</span></div>
+            <div class="pt-field"><span class="pt-label">DTE</span><span class="pt-val" id="ptDTE">—</span></div>
+            <div class="pt-field"><span class="pt-label">Premium</span><span class="pt-val positive" id="ptPremium">—</span></div>
+          </div>
+          <div class="pt-row">
+            <div class="pt-field"><span class="pt-label">Delta</span><span class="pt-val" id="ptDelta">—</span></div>
+            <div class="pt-field"><span class="pt-label">IV</span><span class="pt-val" id="ptIV">—</span></div>
+            <div class="pt-field"><span class="pt-label">Open Interest</span><span class="pt-val" id="ptOI">—</span></div>
+            <div class="pt-field"><span class="pt-label">Breakeven</span><span class="pt-val" id="ptBreakeven">—</span></div>
+          </div>
+          <div class="pt-row">
+            <div class="pt-field pt-field--wide"><span class="pt-label">Max Loss / Contract</span><span class="pt-val negative" id="ptMaxLoss">—</span></div>
+          </div>
+        </div>
+
+        <!-- Trade Inputs -->
+        <div class="form-grid" style="margin-top:16px">
+          <div class="form-group">
+            <label>Contracts</label>
+            <input type="number" id="ptContracts" value="1" min="1" max="10" oninput="Scanner.updateCostDisplay()" />
+          </div>
+          <div class="form-group">
+            <label>Stop Loss (premium)</label>
+            <input type="number" id="ptStopInput" placeholder="0.00" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Target (premium)</label>
+            <input type="number" id="ptTargetInput" placeholder="0.00" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Paper Cash Available</label>
+            <span class="form-static" id="ptCashAvail">—</span>
+          </div>
+          <div class="form-group form-group--full">
+            <label>Trade Thesis</label>
+            <textarea id="ptThesisInput" placeholder="Why are you taking this trade? What's your catalyst?" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="pt-cost-row">
+          <span class="pt-cost-label">Total Cost:</span>
+          <span class="pt-cost-value" id="ptTotalCost">$0.00</span>
+          <span class="pt-cost-note">(paper money only)</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn--secondary" id="paperTradeModalCancel">Cancel</button>
+        <button class="btn btn--primary" id="paperTradeModalSave">Open Paper Trade</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Close Paper Trade -->
+  <div class="modal-overlay" id="closeTradeModal" style="display:none">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3>Close Paper Trade</h3>
+        <button class="modal-close" id="closeTradeModalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="pt-summary" style="margin-bottom:16px">
+          <div class="pt-field"><span class="pt-label">Contract</span><span class="pt-val" id="ctTicker">—</span></div>
+          <div class="pt-field"><span class="pt-label">Entry Premium</span><span class="pt-val" id="ctEntry">—</span></div>
+          <div class="pt-field"><span class="pt-label">Total Cost</span><span class="pt-val" id="ctCost">—</span></div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Exit Premium (per share)</label>
+            <input type="number" id="ctExitPremium" placeholder="0.00" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Exit Reason</label>
+            <select id="ctExitReason">
+              <option value="target_hit">Target Hit</option>
+              <option value="stop_hit">Stop Hit</option>
+              <option value="manual">Manual Close</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+          <div class="form-group form-group--full">
+            <label>Lessons Learned</label>
+            <textarea id="ctLessons" placeholder="What did this trade teach you?" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn--secondary" id="closeTradeModalClose2" onclick="Scanner.closeCloseModal()">Cancel</button>
+        <button class="btn btn--primary" id="closeTradeConfirmBtn">Confirm Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- EMERGENCY BANNER (hidden by default) -->
   <div class="emergency-banner" id="emergencyBanner" style="display:none">
     ⚠ HARD FLOOR REACHED — Trading halted. Account value at or below $250. No new positions.
@@ -653,6 +867,10 @@
   <script src="js/indicators.js"></script>
   <script src="js/scoring.js"></script>
   <script src="js/options.js"></script>
+  <script src="js/paper-trading.js"></script>
+  <script src="js/options-scanner.js"></script>
+  <script src="js/robinhood-sync.js"></script>
+  <script src="js/scanner.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/watchlist.js"></script>
   <script src="js/macro.js"></script>
