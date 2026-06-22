@@ -109,6 +109,7 @@ const App = {
     Agents.init();
     Scanner.init();       // Phase 2
     OptionsScanner.init(); // Phase 2
+    BacktestUI.init();    // Phase 4
   },
 
   // Periodic background checks (every 5 minutes)
