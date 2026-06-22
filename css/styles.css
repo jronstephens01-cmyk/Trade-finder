@@ -159,7 +159,12 @@ table{border-collapse:collapse;width:100%}
 .cost-value{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--cyan)}
 .sector-exposure-list{margin-top:14px;display:flex;flex-direction:column;gap:6px}
 .sector-exp-row{display:grid;grid-template-columns:140px 1fr 60px;align-items:center;gap:12px}
-.sector-exp-name{font-size:12px;color:var(
+.sector-exp-name{font-size:12px;color:var(--text-secondary)}
+.sector-exp-bar-wrap{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.sector-exp-bar-fill{height:100%;background:var(--cyan);border-radius:2px}
+.sector-exp-bar-fill.warn{background:var(--amber)}
+.sector-exp-bar-fill.danger{background:var(--red)}
+.sector-exp-pct{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);text-align:right}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
 .modal{background:var(--bg-surface);border:1px solid var(--border-bright);border-radius:var(--radius-lg);width:600px;max-width:95vw;max-height:90vh;overflow-y:auto}
 .modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border)}
