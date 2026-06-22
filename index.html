@@ -54,6 +54,7 @@
     <button class="nav-tab" data-tab="journal">Journal</button>
     <button class="nav-tab" data-tab="reports">Reports</button>
     <button class="nav-tab" data-tab="backtest">Backtest</button>
+    <button class="nav-tab" data-tab="phase5">Validation</button>
     <button class="nav-tab" data-tab="agents">Agents</button>
   </nav>
 
@@ -627,6 +628,97 @@
 
     </section>
 
+    <!-- TAB: PHASE 5 VALIDATION -->
+    <section class="tab-panel" id="tab-phase5">
+      <div class="panel-header">
+        <h2 class="panel-title">Phase 5 — Validation</h2>
+        <div class="panel-actions">
+          <span class="phase-badge" style="background:rgba(0,230,118,0.1);border-color:var(--green);color:var(--green)">90-DAY PAPER VALIDATION</span>
+        </div>
+      </div>
+
+      <!-- Progress Dashboard -->
+      <div id="phase5Progress"></div>
+
+      <!-- Open Paper Options Trades -->
+      <div class="section-block" style="margin-top:20px">
+        <div class="section-label">OPEN PAPER OPTIONS POSITIONS</div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th><th>Ticker</th><th>Type</th><th>Strike</th>
+                <th>Expiry</th><th>DTE</th><th>Qty</th><th>Entry $</th>
+                <th>Current $</th><th>Unreal. P&L</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="phase5OpenTrades">
+              <tr class="empty-row"><td colspan="11">No open paper trades.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Trade History -->
+      <div class="section-block">
+        <div class="section-label">PAPER OPTIONS HISTORY</div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th><th>Date</th><th>Ticker</th><th>Type</th>
+                <th>Contract</th><th>Qty</th><th>Entry → Exit</th>
+                <th>P&L $</th><th>P&L %</th><th>Result</th>
+              </tr>
+            </thead>
+            <tbody id="phase5History">
+              <tr class="empty-row"><td colspan="10">No closed paper trades yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODAL: Close Paper Options Trade -->
+    <div class="modal-overlay" id="closeOptModal" style="display:none">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <h3>Close Paper Trade</h3>
+          <button class="modal-close" id="closeOptModalClose">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="pt-summary" style="margin-bottom:16px">
+            <div class="pt-field"><span class="pt-label">CONTRACT</span><span class="pt-val" id="closeOptTicker">—</span></div>
+            <div class="pt-field"><span class="pt-label">ENTRY PREMIUM</span><span class="pt-val" id="closeOptEntry">—</span></div>
+            <div class="pt-field"><span class="pt-label">TOTAL COST</span><span class="pt-val" id="closeOptCost">—</span></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Exit Premium (per share)</label>
+              <input type="number" id="closeOptExitPremium" placeholder="0.00" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label>Exit Reason</label>
+              <select id="closeOptReason">
+                <option value="target_hit">Target Hit</option>
+                <option value="stop_hit">Stop Hit</option>
+                <option value="manual">Manual Close</option>
+                <option value="expired">Expired</option>
+              </select>
+            </div>
+            <div class="form-group form-group--full">
+              <label>Lessons Learned</label>
+              <textarea id="closeOptLessons" placeholder="What did this trade teach you?" rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--secondary" onclick="Phase5UI.hideCloseModal()">Cancel</button>
+          <button class="btn btn--primary" id="closeOptConfirmBtn">Confirm Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- TAB: AGENTS -->
     <section class="tab-panel" id="tab-agents">
       <div class="panel-header">
@@ -896,6 +988,8 @@
   <script src="js/pipeline.js"></script>
   <script src="js/agent-ui.js"></script>
   <script src="js/scanner.js"></script>
+  <script src="js/phase5.js"></script>
+  <script src="js/phase5-ui.js"></script>
   <script src="js/backtest.js"></script>
   <script src="js/backtest-ui.js"></script>
   <script src="js/dashboard.js"></script>
