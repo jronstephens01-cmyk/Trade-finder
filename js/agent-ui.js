@@ -132,13 +132,176 @@ const AgentUI = {
     const gate = document.getElementById('approvalGate');
     if (!gate) return;
 
-    const alert    = cioResult.tradeAlert || {};
-    const scores   = cioResult.scores || {};
-    const options  = Pipeline.state.results?.optionsAnalysis || {};
+    const alert     = cioResult.tradeAlert || {};
+    const scores    = cioResult.scores || {};
+    const options   = Pipeline.state.results?.optionsAnalysis || {};
     const execution = Pipeline.state.results?.executionPlan || {};
-    const scoreColor     = Scoring.scoreColor(scores.total);
-    const isHighConviction = scores.total >= 50;
-    const isQualified      = scores.total >= 42;
+    const isQualified = scores.total >= 42;
+    const scoreColor  = Scoring.scoreColor(scores.total);
+
+    // Score emoji
+    const scoreEmoji = scores.total >= 50 ? '🟢' : scores.total >= 42 ? '🟡' : '🔴';
+    const regimeEmoji = (alert.marketRegime || '').includes('On') ? '📈' : (alert.marketRegime || '').includes('Off') ? '📉' : '➡️';
+
+    gate.style.display = 'block';
+    gate.innerHTML = `
+      <div class="approval-gate">
+
+        <!-- BIG SIMPLE HEADER -->
+        <div class="approval-header">
+          <div class="approval-badge ${scores.total >= 50 ? 'badge--high' : scores.total >= 42 ? 'badge--qualified' : 'badge--monitor'}">
+            ${cioResult.scoreLabel}
+          </div>
+          <div class="approval-score" style="color:${scoreColor}">${scores.total}/60</div>
+          <div class="approval-title">${alert.ticker || candidate.ticker} — ${(alert.assetType || 'EQUITY').toUpperCase()}</div>
+        </div>
+
+        <!-- SIMPLE SUMMARY CARD -->
+        <div style="background:var(--bg-surface);border:2px solid ${scoreColor};border-radius:8px;padding:20px;margin:0">
+
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin-bottom:16px;letter-spacing:0.1em">THE SIMPLE VERSION</div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">
+
+            <div style="text-align:center;padding:14px;background:var(--bg-raised);border-radius:6px">
+              <div style="font-size:22px;margin-bottom:4px">📥</div>
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">BUY AT</div>
+              <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--cyan)">${alert.entryZone || execution.limitPrice || '—'}</div>
+            </div>
+
+            <div style="text-align:center;padding:14px;background:var(--bg-raised);border-radius:6px">
+              <div style="font-size:22px;margin-bottom:4px">🛑</div>
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">SELL IF IT DROPS TO</div>
+              <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--red)">${alert.stopLoss || execution.stopPrice || '—'}</div>
+            </div>
+
+            <div style="text-align:center;padding:14px;background:var(--bg-raised);border-radius:6px">
+              <div style="font-size:22px;margin-bottom:4px">🎯</div>
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">TAKE PROFIT AT</div>
+              <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--green)">${alert.target || execution.targetPrice || '—'}</div>
+            </div>
+
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="padding:12px;background:var(--bg-raised);border-radius:6px">
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">💰 HOW MUCH TO SPEND</div>
+              <div style="font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--text-primary)">${Utils.formatCurrency(riskResult.recommendedPositionDollar)}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${riskResult.recommendedPositionPercent}% of your account</div>
+            </div>
+            <div style="padding:12px;background:var(--bg-raised);border-radius:6px">
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">⏱️ HOW LONG TO HOLD</div>
+              <div style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary)">${alert.timeframe || '2-4 weeks'}</div>
+              <div style="font-size:11px;color:var(--text-muted)">Swing trade</div>
+            </div>
+            <div style="padding:12px;background:var(--bg-raised);border-radius:6px">
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">📊 WIN/LOSS RATIO</div>
+              <div style="font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--text-primary)">${alert.riskReward || '—'}</div>
+              <div style="font-size:11px;color:var(--text-muted)">For every $1 risked</div>
+            </div>
+            <div style="padding:12px;background:var(--bg-raised);border-radius:6px">
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">${regimeEmoji} MARKET MOOD</div>
+              <div style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary)">${alert.marketRegime || '—'}</div>
+              <div style="font-size:11px;color:var(--text-muted)">Current regime</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- OPTIONS CONTRACT -->
+        ${options.recommendedStrategy ? `
+        <div style="background:rgba(0,212,255,0.05);border:1px solid var(--cyan-dim);border-radius:8px;padding:16px;margin-top:12px">
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);margin-bottom:12px;letter-spacing:0.1em">📋 OPTIONS CONTRACT DETAILS</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">WHAT TO BUY</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--cyan)">${(options.recommendedStrategy || '').replace(/_/g,' ').toUpperCase()}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">STRIKE PRICE</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)">$${options.recommendedStrike || '—'}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">EXPIRY DATE</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--amber)">${options.recommendedExpiry || '—'}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">COST PER CONTRACT</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:${options.liveDataAvailable ? 'var(--green)' : 'var(--amber)'}">
+                $${options.realPremium ? (options.realPremium * 100).toFixed(0) : options.estimatedPremium ? (options.estimatedPremium * 100).toFixed(0) : '—'}
+                ${options.liveDataAvailable ? '<span style="font-size:9px;color:var(--green)"> 📡 LIVE</span>' : '<span style="font-size:9px;color:var(--amber)"> est.</span>'}
+              </div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">CONTRACTS</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)">${execution.contracts || 1}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">BREAKEVEN</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)">$${options.breakeven || '—'}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">MAX YOU CAN LOSE</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--red)">$${options.maxLoss || execution.maxRisk || '—'}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">ODDS OF WINNING</div>
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)">${options.probabilityOfProfit ? Math.round(options.probabilityOfProfit * 100) + '%' : '—'}</div>
+            </div>
+          </div>
+          ${execution.orderInstructions ? `
+          <div style="margin-top:12px;padding:10px;background:var(--bg-raised);border-radius:4px;font-size:12px;color:var(--text-secondary);line-height:1.6">
+            <strong style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">HOW TO PLACE THE ORDER IN ROBINHOOD:</strong><br/>
+            ${execution.orderInstructions}
+          </div>` : ''}
+        </div>` : ''}
+
+        <!-- WHY + RISKS — SIMPLE LANGUAGE -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div style="background:rgba(0,230,118,0.04);border:1px solid var(--green-dim);border-radius:8px;padding:14px">
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--green);margin-bottom:8px">✅ WHY THE AI LIKES THIS</div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.6">${alert.thesis || '—'}</div>
+          </div>
+          <div style="background:rgba(255,61,87,0.04);border:1px solid var(--red-dim);border-radius:8px;padding:14px">
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--red);margin-bottom:8px">⚠️ WHAT COULD GO WRONG</div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.6">${alert.risks || '—'}</div>
+          </div>
+        </div>
+
+        <!-- WALK AWAY IF -->
+        <div style="background:rgba(255,193,7,0.05);border:1px solid var(--amber-dim);border-radius:8px;padding:14px;margin-top:12px">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--amber);margin-bottom:6px">🚪 WALK AWAY FROM THIS TRADE IF...</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.6">${alert.invalidation || '—'}</div>
+        </div>
+
+        <!-- SCORE BREAKDOWN -->
+        <div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:12px">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:10px;letter-spacing:0.1em">${scoreEmoji} AI SCORE BREAKDOWN — ${scores.total}/60</div>
+          <div class="approval-scores" style="padding:0">
+            ${AgentUI.renderScoreBar('Technical',   scores.technical)}
+            ${AgentUI.renderScoreBar('Fundamental', scores.fundamental)}
+            ${AgentUI.renderScoreBar('Catalyst',    scores.catalyst)}
+            ${AgentUI.renderScoreBar('Risk/Reward', scores.risk)}
+            ${AgentUI.renderScoreBar('Market',      scores.market)}
+            ${AgentUI.renderScoreBar('Macro',       scores.macro)}
+          </div>
+        </div>
+
+        <!-- DECISION -->
+        <div class="approval-actions" style="margin-top:16px">
+          <button class="btn btn--danger approval-btn-decline" onclick="AgentUI.recordDecision('declined')">
+            ✕ Pass on This Trade
+          </button>
+          <button class="btn btn--primary approval-btn-approve"
+            onclick="AgentUI.recordDecision('approved')"
+            ${!isQualified ? 'disabled title="Score too low — not recommended"' : ''}>
+            ✓ Log to Journal & Execute
+          </button>
+        </div>
+        ${!isQualified ? '<div class="approval-warning">Score is ' + scores.total + '/60 — minimum is 42 to trade. The AI says wait for a better setup.</div>' : ''}
+
+      </div>
+    `;
+  },
 
     gate.style.display = 'block';
     gate.innerHTML = `
@@ -181,7 +344,10 @@ const AgentUI = {
             </div>
             <div class="alert-field">
               <span class="alert-label">PREMIUM (per share)</span>
-              <span class="alert-val">$${options.estimatedPremium || '—'}</span>
+              <span class="alert-val">${options.liveDataAvailable
+                ? `$${options.realPremium} <span style="font-size:10px;color:var(--text-muted)">(bid $${options.realBid} / ask $${options.realAsk})</span>`
+                : `$${options.estimatedPremium} <span style="font-size:10px;color:var(--amber)">est.</span>`
+              }</span>
             </div>
             <div class="alert-field">
               <span class="alert-label">DELTA</span>
