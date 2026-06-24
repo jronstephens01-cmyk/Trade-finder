@@ -46,22 +46,16 @@ const Pipeline = {
       results.agents.agent15 = macroResult;
       AgentUI.setAgentStatus('agent15', 'complete', `Regime: ${macroResult.regime} (${macroResult.totalScore}/50)`);
 
-      // ── WAVE 2: Scan + Sector in parallel ───────────────────────
+      // ── WAVE 2: Scan first, then sector filter with candidates ───
+      const portfolio  = Storage.getPortfolio();
+      const riskState  = Storage.getRiskState();
       AgentUI.setAgentStatus('agent1', 'running', 'Scanning watchlist...');
-      AgentUI.setAgentStatus('agent3', 'running', 'Checking sectors...');
-
-      const [scanResult, sectorPreResult] = await Promise.all([
-        Pipeline.callAgent('agent1', AGENT_PROMPTS.juniorAnalyst, {
-          task: 'scan_candidates', watchlist, quotes: marketData.quotes,
-          macroRegime: macroResult.regime, scoreThreshold: macroResult.scoreThreshold || 42
-        }, prefs.workerUrl),
-        Pipeline.callAgent('agent3', AGENT_PROMPTS.sectorHead, {
-          task: 'assess_sectors', sectorData: marketData.sectors, macroRegime: macroResult.regime
-        }, prefs.workerUrl)
-      ]);
+      const scanResult = await Pipeline.callAgent('agent1', AGENT_PROMPTS.juniorAnalyst, {
+        task: 'scan_candidates', watchlist, quotes: marketData.quotes,
+        macroRegime: macroResult.regime, scoreThreshold: macroResult.scoreThreshold || 42
+      }, prefs.workerUrl);
 
       results.agents.agent1 = scanResult;
-      results.agents.agent3 = sectorPreResult;
 
       if (!scanResult.candidates?.length) {
         AgentUI.setAgentStatus('agent1', 'complete', 'No candidates found');
@@ -71,8 +65,22 @@ const Pipeline = {
       }
       AgentUI.setAgentStatus('agent1', 'complete', `${scanResult.candidates.length} candidates identified`);
 
-      // Filter candidates by sector
-      const filteredCandidates = (sectorPreResult.filteredCandidates || scanResult.candidates).filter(Boolean);
+      // Agent 3 runs after Agent 1 so it has the real candidate list
+      AgentUI.setAgentStatus('agent3', 'running', 'Filtering by sector strength...');
+      const sectorPreResult = await Pipeline.callAgent('agent3', AGENT_PROMPTS.sectorHead, {
+        task: 'filter_by_sector',
+        candidates: scanResult.candidates,
+        sectorData: marketData.sectors,
+        macroRegime: macroResult.regime
+      }, prefs.workerUrl);
+
+      results.agents.agent3 = sectorPreResult;
+
+      // If sector filter returns empty, fall back to all candidates
+      const filteredCandidates = (sectorPreResult.filteredCandidates?.length
+        ? sectorPreResult.filteredCandidates
+        : scanResult.candidates).filter(Boolean);
+
       AgentUI.setAgentStatus('agent3', 'complete', `${filteredCandidates.length} candidates passed sector filter`);
 
       if (!filteredCandidates.length) { Pipeline.finish(results, 'filtered_out'); return; }
@@ -87,10 +95,6 @@ const Pipeline = {
 
       // ── WAVE 3: Research + Live Options in parallel ──────────────
       AgentUI.setAgentStatus('agent2', 'running', `Analyzing ${topCandidate.ticker}...`);
-      AgentUI.setAgentStatus('agent16', 'running', 'Fetching live options chain...');
-
-      const portfolio  = Storage.getPortfolio();
-      const riskState  = Storage.getRiskState();
 
       const [researchResult, liveOptionsData] = await Promise.all([
         Pipeline.callAgent('agent2', AGENT_PROMPTS.researchAnalyst, {
