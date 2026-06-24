@@ -330,7 +330,8 @@
       <div class="scanner-view" id="scanner-view-pipeline">
         <div class="pipeline-controls">
           <button class="btn btn--primary pipeline-run-btn" id="runPipelineBtn">▶ Run AI Pipeline</button>
-          <span class="pipeline-desc">Runs all 6 agents — Macro → Sector → Research → Risk → CIO → You</span>
+          <button class="btn btn--secondary" onclick="App.resetPipeline()" style="font-size:11px">↺ Reset</button>
+          <span class="pipeline-desc">Scans 50 tickers — AI finds best setup — you decide</span>
         </div>
         <div id="pipelineContainer">
           <div class="pipeline-idle">
