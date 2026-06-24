@@ -7,14 +7,32 @@ const Scanner = {
 
   init() {
     // Pipeline controls
-    document.getElementById('runPipelineBtn')?.addEventListener('click', () => {
-      const watchlist = Storage.getWatchlist().filter(t => !t.startsWith('^'));
-      if (!watchlist.length) {
-        Utils.toast('Add tickers to your watchlist first', 'warn');
-        return;
-      }
-      Pipeline.run(watchlist);
-    });
+    const runBtn = document.getElementById('runPipelineBtn');
+    if (runBtn) {
+      // Remove any existing listeners by cloning
+      const newBtn = runBtn.cloneNode(true);
+      runBtn.parentNode.replaceChild(newBtn, runBtn);
+
+      newBtn.addEventListener('click', () => {
+        // Force reset stuck state
+        if (Pipeline.state.running) {
+          const elapsed = Date.now() - (Pipeline.state.startTime || 0);
+          if (elapsed > 300000) { // 5 minutes — definitely stuck
+            Pipeline.state.running = false;
+          } else {
+            Utils.toast('Pipeline is running — please wait', 'warn');
+            return;
+          }
+        }
+        const watchlist = Storage.getWatchlist().filter(t => !t.startsWith('^'));
+        if (!watchlist.length) {
+          Utils.toast('Add tickers to your watchlist first', 'warn');
+          return;
+        }
+        Pipeline.state.startTime = Date.now();
+        Pipeline.run(watchlist);
+      });
+    }
 
     // Scanner controls
     document.getElementById('runScanBtn')?.addEventListener('click', Scanner.runScan);
