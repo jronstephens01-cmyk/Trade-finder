@@ -18,43 +18,46 @@ const Phase5 = {
 
       if (!res.ok) throw new Error(`Options chain fetch failed: ${res.status}`);
       const data = await res.json();
-
       if (data.error) throw new Error(data.error);
 
-      // Find the best matching call contract
-      const calls = data.calls || [];
-      const puts  = data.puts  || [];
+      // Debug — log what we got from Worker
+      console.log('Live options data for', ticker, {
+        underlyingPrice: data.underlyingPrice,
+        recommendedCall: data.recommendedCall,
+        atmCall: data.atmCall,
+        callsCount: data.calls?.length
+      });
 
-      // Find closest strike to target
-      const findBestContract = (contracts, strike, expiry) => {
-        if (!contracts.length) return null;
+      // Use Worker's pre-selected recommended contracts
+      // These have real bid/ask/mark from Yahoo Finance
+      const bestCall = data.recommendedCall || data.atmCall;
+      const bestPut  = data.recommendedPut  || data.atmPut;
 
-        // Filter by expiry if provided
-        let filtered = expiry
-          ? contracts.filter(c => c.expiry === expiry)
-          : contracts;
-
-        if (!filtered.length) filtered = contracts;
-
-        // Find closest strike
-        filtered.sort((a, b) =>
-          Math.abs(a.strike - strike) - Math.abs(b.strike - strike)
-        );
-
-        return filtered[0] || null;
+      // If we have a target strike, find the closest real contract
+      const findClosest = (contracts, strike) => {
+        if (!contracts?.length) return null;
+        return contracts.reduce((best, c) => {
+          if (!best) return c;
+          return Math.abs(c.strike - strike) < Math.abs(best.strike - strike) ? c : best;
+        }, null);
       };
 
-      const bestCall = findBestContract(calls, targetStrike || data.underlyingPrice, targetExpiry);
-      const bestPut  = findBestContract(puts,  targetStrike || data.underlyingPrice, targetExpiry);
+      const finalCall = targetStrike
+        ? findClosest(data.calls, targetStrike) || bestCall
+        : bestCall;
+
+      const finalPut = targetStrike
+        ? findClosest(data.puts, targetStrike) || bestPut
+        : bestPut;
 
       return {
         ticker,
         underlyingPrice: data.underlyingPrice,
-        bestCall,
-        bestPut,
-        allCalls: calls,
-        allPuts: puts,
-        expirations: data.expirations || [],
+        bestCall: finalCall,
+        bestPut:  finalPut,
+        allCalls: data.calls || [],
+        allPuts:  data.puts  || [],
+        expirations: data.expirationDates || [],
         timestamp: Date.now(),
         source: 'live'
       };
@@ -65,14 +68,16 @@ const Phase5 = {
     }
   },
 
-  // Extract real premium from live chain
+  // Extract real mark price (midpoint of bid/ask)
   getRealPremium(contract) {
     if (!contract) return null;
-    // Use midpoint of bid/ask for realistic fill price
+    // Use mark price if available (already calculated in Worker)
+    if (contract.mark && contract.mark > 0) return Utils.round(contract.mark, 2);
+    // Fall back to midpoint
     const bid = contract.bid || 0;
-    const ask = contract.ask || contract.lastPrice || 0;
+    const ask = contract.ask || 0;
     if (bid && ask) return Utils.round((bid + ask) / 2, 2);
-    return contract.lastPrice || null;
+    return contract.lastPrice ? Utils.round(contract.lastPrice, 2) : null;
   },
 
   // Check if live contract meets liquidity requirements
