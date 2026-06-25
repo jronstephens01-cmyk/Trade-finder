@@ -205,33 +205,40 @@ const AgentUI = {
             </div>
           </div>
 
-          <!-- OPTIONS PLAY -->
+          <!-- OPTIONS PLAY — Budget filter + 3 tiers -->
           <div style="padding:16px 18px">
-            <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:12px">🎯 OPTIONS PLAY ${liveTag}</div>
-
-            <div style="margin-bottom:12px">
-              <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px">BUY CONTRACT</div>
-              <div style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--cyan)">$${optStrike} Call — ${optExpiry}</div>
-              <div style="font-family:var(--font-mono);font-size:13px;color:var(--text-secondary);margin-top:2px">${optCost} per contract</div>
-              ${optPremium && options.realBid ? `<div style="font-size:10px;color:var(--text-muted)">Bid $${options.realBid} / Ask $${options.realAsk}</div>` : ''}
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:0.1em;color:var(--text-muted)">🎯 OPTIONS PLAY ${liveTag}</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-size:10px;color:var(--text-muted)">Max budget:</span>
+                <select id="optBudgetFilter" onchange="AgentUI.filterOptionTiers()"
+                  style="font-family:var(--font-mono);font-size:11px;background:var(--bg-surface);border:1px solid var(--border-bright);border-radius:4px;padding:3px 6px;color:var(--cyan);cursor:pointer">
+                  <option value="99999">Any price</option>
+                  <option value="200">Under $200</option>
+                  <option value="500">Under $500</option>
+                  <option value="1000">Under $1,000</option>
+                  <option value="2000">Under $2,000</option>
+                </select>
+              </div>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <div style="padding:10px;background:rgba(255,61,87,0.06);border:1px solid var(--red-dim);border-radius:6px">
-                <div style="font-size:9px;color:var(--red);font-family:var(--font-mono);margin-bottom:3px">🛑 EXIT IF</div>
-                <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--red)">Stock → ${stockStop}</div>
-                <div style="font-size:10px;color:var(--text-muted);margin-top:2px">OR premium → ${optStop}</div>
+            <!-- Same stop/target for all tiers -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+              <div style="padding:8px;background:rgba(255,61,87,0.06);border:1px solid var(--red-dim);border-radius:6px;text-align:center">
+                <div style="font-size:9px;color:var(--red);font-family:var(--font-mono);margin-bottom:2px">🛑 EXIT IF STOCK →</div>
+                <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--red)">${stockStop}</div>
                 <div style="font-size:9px;color:var(--amber);margin-top:2px">⚡ Paid less? Stop = entry ÷ 2</div>
               </div>
-              <div style="padding:10px;background:rgba(0,230,118,0.06);border:1px solid var(--green-dim);border-radius:6px">
-                <div style="font-size:9px;color:var(--green);font-family:var(--font-mono);margin-bottom:3px">🎯 TAKE PROFIT</div>
-                <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--green)">Stock → ${stockTarget}</div>
-                <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Sell contract then</div>
+              <div style="padding:8px;background:rgba(0,230,118,0.06);border:1px solid var(--green-dim);border-radius:6px;text-align:center">
+                <div style="font-size:9px;color:var(--green);font-family:var(--font-mono);margin-bottom:2px">🎯 TAKE PROFIT STOCK →</div>
+                <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--green)">${stockTarget}</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-top:2px">Sell contract then</div>
               </div>
             </div>
 
-            <div style="margin-top:8px;padding:7px 10px;background:var(--bg-surface);border-radius:4px;font-size:11px;color:var(--text-muted)">
-              ${options.probabilityOfProfit ? `Win odds: ${Math.round(options.probabilityOfProfit*100)}%` : 'Win odds: —'} &nbsp;·&nbsp; Max loss: ${optCost}
+            <!-- 3 Tier contracts -->
+            <div id="optionTiers">
+              ${AgentUI.renderOptionTiers(options, stockStop, stockTarget)}
             </div>
           </div>
         </div>
@@ -291,6 +298,86 @@ const AgentUI = {
     if (btn) btn.innerHTML = isHidden
       ? '▲ Hide Details'
       : '▼ Show Details — full thesis, risks, score breakdown';
+  },
+
+  // Build 3 tier option cards from live chain data
+  renderOptionTiers(options, stockStop, stockTarget, maxBudget = 99999) {
+    const allCalls = Pipeline.state.results?.optionsRawCalls || [];
+
+    if (!allCalls.length) {
+      const premium = options.realPremium || options.estimatedPremium;
+      const cost    = premium ? (premium * 100) : null;
+      if (!premium) return `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:12px">No live options data available</div>`;
+      return AgentUI.renderSingleTier('🟡', 'STANDARD', options.recommendedStrike, options.recommendedExpiry, cost, premium, options.realBid, options.realAsk, options.probabilityOfProfit, maxBudget);
+    }
+
+    const underlying = options.underlyingPrice || 0;
+    const sorted     = [...allCalls].filter(c => (c.mark || c.ask || 0) > 0).sort((a, b) => a.strike - b.strike);
+    if (!sorted.length) return `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:12px">No liquid contracts found</div>`;
+
+    // Find ATM index
+    const atmIdx = sorted.reduce((best, c, i) =>
+      Math.abs(c.strike - underlying) < Math.abs(sorted[best].strike - underlying) ? i : best, 0);
+
+    // Pick 3 distinct tiers
+    const conservative = sorted[Math.max(0, atmIdx - 1)];
+    const standard     = sorted[atmIdx];
+    const aggressive   = sorted[Math.min(sorted.length - 1, atmIdx + 2)];
+
+    const seen = new Set();
+    const tiers = [
+      { emoji: '🟢', label: 'CONSERVATIVE', contract: conservative },
+      { emoji: '🟡', label: 'STANDARD',     contract: standard     },
+      { emoji: '🔴', label: 'AGGRESSIVE',   contract: aggressive   },
+    ].filter(t => {
+      if (!t.contract || seen.has(t.contract.strike)) return false;
+      seen.add(t.contract.strike);
+      return true;
+    });
+
+    return tiers.map(t => {
+      const mark = t.contract.mark || ((t.contract.bid + t.contract.ask) / 2) || 0;
+      const cost = mark * 100;
+      return AgentUI.renderSingleTier(t.emoji, t.label, t.contract.strike, t.contract.expiry, cost, mark, t.contract.bid, t.contract.ask, t.contract.probabilityOfProfit, maxBudget);
+    }).join('');
+  },
+
+  renderSingleTier(emoji, label, strike, expiry, cost, premium, bid, ask, winOdds, maxBudget) {
+    const affordable = cost <= maxBudget;
+    const opacity    = affordable ? '1' : '0.35';
+    const border     = label === 'CONSERVATIVE' ? 'var(--green-dim)' : label === 'STANDARD' ? 'var(--cyan-dim)' : 'var(--amber-dim)';
+    const color      = label === 'CONSERVATIVE' ? 'var(--green)' : label === 'STANDARD' ? 'var(--cyan)' : 'var(--amber)';
+
+    return `
+      <div style="opacity:${opacity};margin-bottom:8px;padding:10px;background:var(--bg-surface);border:1px solid ${border};border-radius:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:12px">${emoji}</span>
+          <span style="font-family:var(--font-mono);font-size:9px;font-weight:600;color:${color};letter-spacing:0.08em">${label}</span>
+          ${!affordable ? `<span style="font-family:var(--font-mono);font-size:9px;color:var(--red)">OVER BUDGET</span>` : ''}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div>
+            <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text-primary)">$${strike} Call — ${expiry}</div>
+            ${bid && ask ? `<div style="font-size:10px;color:var(--text-muted)">Bid $${bid} / Ask $${ask}</div>` : ''}
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:${color}">$${cost ? cost.toFixed(0) : '—'}</div>
+            <div style="font-size:9px;color:var(--text-muted)">per contract</div>
+          </div>
+        </div>
+        ${winOdds ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px">Win odds: ${Math.round(winOdds * 100)}%</div>` : ''}
+      </div>
+    `;
+  },
+
+  filterOptionTiers() {
+    const budget  = parseInt(document.getElementById('optBudgetFilter')?.value || '99999');
+    const options = Pipeline.state.results?.optionsAnalysis || {};
+    const alert   = Pipeline.state.results?.finalRecommendation?.tradeAlert || {};
+    const stockStop   = alert.stopLoss   || '—';
+    const stockTarget = alert.target     || '—';
+    const el = document.getElementById('optionTiers');
+    if (el) el.innerHTML = AgentUI.renderOptionTiers(options, stockStop, stockTarget, budget);
   },
 
   renderScoreBar(label, score) {
