@@ -27,7 +27,7 @@ const Pipeline = {
     error: null
   },
 
-  async run(watchlist) {
+  async run(watchlist, marketCandidates = null) {
     if (Pipeline.state.running) { Utils.toast('Pipeline already running', 'warn'); return; }
 
     const prefs = Storage.getPrefs();
@@ -104,9 +104,17 @@ const Pipeline = {
         macroRegime: macroResult.regime,
         scoreThreshold: macroResult.scoreThreshold || 42,
         tierHint,
-        cheapTickers:  cheapTickers.slice(0, 15),
-        midTickers:    midTickers.slice(0, 15),
-        priceTierFocus: tierCycle === 1 ? 'cheap' : tierCycle === 2 ? 'mid' : 'all'
+        cheapTickers:   cheapTickers.slice(0, 15),
+        midTickers:     midTickers.slice(0, 15),
+        priceTierFocus: tierCycle === 1 ? 'cheap' : tierCycle === 2 ? 'mid' : 'all',
+        // Pre-screened market candidates if from full market scan
+        preScreenedCandidates: marketCandidates ? marketCandidates.map(c => ({
+          ticker:            c.ticker,
+          price:             c.price,
+          changePct:         c.changePct,
+          cheapestOptionCost: c.cheapestCost,
+          affordabilityTier: c.affordability
+        })) : null
       }, prefs.workerUrl);
 
       results.agents.agent1 = scanResult;
@@ -396,6 +404,54 @@ const Pipeline = {
     } finally {
       Pipeline.state.running     = false;
       Pipeline.state.currentAgent = null;
+    }
+  },
+
+  // Full market scan — finds affordable options across entire market
+  async runMarketScan() {
+    if (Pipeline.state.running) { Utils.toast('Pipeline already running', 'warn'); return; }
+
+    const prefs = Storage.getPrefs();
+    if (!prefs.workerUrl) { Utils.toast('Worker URL not set in Agents tab', 'error'); return; }
+
+    // Use user-chosen budget from the dropdown, default to $500 if not set
+    const budgetEl = document.getElementById('marketScanBudget');
+    const maxCost  = budgetEl ? parseInt(budgetEl.value) : 500;
+
+    Pipeline.state.running = true;
+    AgentUI.startPipeline('MARKET-' + Date.now().toString(36).toUpperCase());
+
+    try {
+      AgentUI.setAgentStatus('data', 'running', `Scanning full market for options under $${maxCost}/contract...`);
+
+      const res  = await fetch(`${prefs.workerUrl}/api/market-scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxCost })
+      });
+      const scan = await res.json();
+
+      if (!scan.tickers?.length) {
+        AgentUI.setAgentStatus('data', 'rejected', 'No affordable options found right now');
+        AgentUI.showPipelineComplete('no_candidates');
+        Pipeline.state.running = false;
+        return;
+      }
+
+      AgentUI.setAgentStatus('data', 'complete',
+        `Found ${scan.candidates.length} stocks with options under $${maxCost} — top movers: ${scan.tickers.slice(0,5).join(', ')}`);
+
+      // Log what we found for transparency
+      console.log('Market scan results:', scan.candidates.map(c =>
+        `${c.ticker} $${c.price} | cheapest call: $${c.cheapestCost} (${c.affordability})`
+      ).join('\n'));
+
+      // Run full pipeline on the market scan tickers
+      await Pipeline.run(scan.tickers.slice(0, 15), scan.candidates);
+
+    } catch (err) {
+      AgentUI.showError('Market scan failed: ' + err.message);
+      Pipeline.state.running = false;
     }
   },
 
