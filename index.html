@@ -304,6 +304,7 @@
   <button class="tab-btn" data-tab="outs">Pitching Outs</button>
   <button class="tab-btn" data-tab="winners">Winners</button>
   <button class="tab-btn" data-tab="ou">O/U</button>
+  <button class="tab-btn" data-tab="nrfi">NRFI/YRFI</button>
   <button class="tab-btn" data-tab="streak">Streak</button>
   <button class="tab-btn" data-tab="parlay">Parlay</button>
   <button class="tab-btn" data-tab="lab">Props Lab</button>
@@ -791,6 +792,40 @@
     </div>
   </div>
 
+  <!-- ============ NRFI / YRFI TAB ============ -->
+  <div id="tab-nrfi" style="display:none;">
+    <div class="panel">
+      <div class="panel-title">NRFI / YRFI Scanner</div>
+      <div class="panel-desc">No Run First Inning vs Yes Run First Inning. Cleanest model in baseball — one at-bat per team, top of the order vs the starter. Model uses each team's offensive run rate, pitcher K% + ERA, umpire zone, and weather. No bullpen variable.</div>
+      <button class="ghost" id="nrfiLoadOddsBtn" style="width:100%; margin-bottom:8px;">Load Live NRFI/YRFI Lines</button>
+      <div class="odds-status" id="nrfiOddsStatus"></div>
+      <button class="primary" id="nrfiScanBtn" style="width:100%;">Scan Today's Slate</button>
+      <div class="progress-text" id="nrfiScanProgress"></div>
+      <div class="edge-gate-row" id="nrfiEdgeGateRow" style="display:none;">
+        <input type="checkbox" id="nrfiEdgeGate">
+        <label for="nrfiEdgeGate" style="margin:0;font-family:var(--body);">Hide plays with &lt; 3pt edge</label>
+      </div>
+    </div>
+
+    <!-- Top NRFI plays -->
+    <div class="panel" id="nrfiTopNrfi" style="display:none;">
+      <div class="panel-title">🔒 Top NRFI Plays <small>model expects scoreless first</small></div>
+      <div id="nrfiNrfiList"></div>
+    </div>
+
+    <!-- Top YRFI plays -->
+    <div class="panel" id="nrfiTopYrfi" style="display:none;">
+      <div class="panel-title">💥 Top YRFI Plays <small>model expects a run in the first</small></div>
+      <div id="nrfiYrfiList"></div>
+    </div>
+
+    <!-- Full board -->
+    <div class="panel">
+      <div class="panel-title">Full Board</div>
+      <div id="nrfiFullBoard"><div class="empty-state">Tap Scan to calculate first-inning probabilities.</div></div>
+    </div>
+  </div>
+
   <!-- ============ STREAK STARTER TAB ============ -->
   <div id="tab-streak" style="display:none;">
     <div class="panel">
@@ -1074,6 +1109,7 @@ const WEATHER_API = "https://api.open-meteo.com/v1/forecast";
 const ODDS_PROXY = "https://mlb-odds-proxy.jronstephens01.workers.dev/odds/api/v1";
 const PROP_MARKET = { HR:'player_home_runs', K:'player_strikeouts', OUTS:'player_pitching_outs' };
 const TOTAL_MARKET = 'totals';
+const NRFI_MARKET  = 'nrfi';  // SharpAPI market slug for NRFI/YRFI
 const EDGE_TAKE_THRESHOLD = 0.03;
 const WORKER_BASE = 'https://mlb-odds-proxy.jronstephens01.workers.dev';
 
@@ -1108,6 +1144,7 @@ let state = {
   bullpenFatigueLoaded: false,
   teamOffenseCache: {},
   ouScanResults: [],
+  nrfiScanResults: [],
   streakPicks: [],
   streakFilter: 'all'
 };
@@ -3219,6 +3256,17 @@ async function runOUScanSilent(){
   window.__lastWinResults = window.__lastWinResults || [];
 }
 
+async function runNRFIScanSilent(){
+  if(!state.games.length) return;
+  const results = [];
+  await runChunked(state.games, async g=>{
+    const r = await calcNRFIGame(g);
+    if(r) results.push(r);
+  }, 4);
+  results.sort((a,b)=> Math.abs(b.edge||0) - Math.abs(a.edge||0));
+  state.nrfiScanResults = results;
+}
+
 function renderParlayLegsBlock(legs, containerId, removeFunc, labelId){
   const wrap = document.getElementById(containerId);
   if(!legs.length){
@@ -4950,6 +4998,24 @@ function buildStreakPool(){
     });
   });
 
+  // NRFI/YRFI plays
+  (state.nrfiScanResults||[]).forEach(r=>{
+    if(!r.nrfiRow || Math.abs(r.nrfiEdge||0) < 0.03) return;
+    const nrfiBetter = (r.nrfiEdge||0) >= (r.yrfiEdge||0);
+    const direction = nrfiBetter ? 'Higher' : 'Lower'; // NRFI=Higher (no scoring), YRFI=Lower
+    const prob = nrfiBetter ? r.nrfiProb : r.yrfiProb;
+    const dirProb = Math.max(prob, 1-prob);
+    if(dirProb < 0.52) return;
+    const side = nrfiBetter ? 'NRFI' : 'YRFI';
+    pool.push({
+      id:`s_nrfi_${r.gamePk}`, type:'TOTAL',
+      subject:`${r.awayAbbr} @ ${r.homeAbbr} ${side}`,
+      stat:`First Inning (${side})`, direction, line:null,
+      modelProb:dirProb, oddsAmerican: r.nrfiRow?.odds_american || null,
+      team:'', opp:'', gamePk:r.gamePk
+    });
+  });
+
   // Game Totals — Over or Under
   (state.ouScanResults||[]).forEach(r=>{
     if(r.overProb===null || Math.abs(r.overProb-0.5) < 0.05) return;
@@ -5271,7 +5337,8 @@ async function loadAllLiveLines(){
     runKsAutoScanSilent(),
     runOutsAutoScanSilent(),
     runWinAutoScanSilent(),
-    runOUScanSilent()
+    runOUScanSilent(),
+    runNRFIScanSilent()
   ]);
 
   // Refresh any leaderboard already rendered
@@ -6287,13 +6354,195 @@ function wireOPCYD(){
   });
 }
 
+/* =========================================================================
+   NRFI / YRFI MODEL (PRODUCT-009)
+   First inning scoring probability using team offense rate, pitcher quality,
+   umpire zone tendency, and weather. No bullpen variable — clean model.
+   ========================================================================= */
+// League average: ~44% of first half-innings have at least 1 run scored
+const LEAGUE_FIRST_INN_SCORE_RATE = 0.44;
+
+async function calcNRFIGame(g){
+  const away = g.teams.away.team, home = g.teams.home.team;
+  const awayPitcherId = g.teams.away.probablePitcher?.id;
+  const homePitcherId = g.teams.home.probablePitcher?.id;
+  const awayAbbr = abbrForTeam(away), homeAbbr = abbrForTeam(home);
+  const awayPitcherName = g.teams.away.probablePitcher?.fullName || 'TBD';
+  const homePitcherName = g.teams.home.probablePitcher?.fullName || 'TBD';
+
+  // Team runs per first inning: RPG/9 × 1.15 (top of order premium)
+  const FIRST_INN_FACTOR = 1.15 / 9;
+  const [awayRPG, homeRPG] = await Promise.all([
+    getTeamRunsPerGame(away.id),
+    getTeamRunsPerGame(home.id)
+  ]);
+  const awayLambda = awayRPG * FIRST_INN_FACTOR; // expected runs in top 1st
+  const homeLambda = homeRPG * FIRST_INN_FACTOR; // expected runs in bottom 1st
+
+  // Base score probability using Poisson: P(score ≥ 1) = 1 - e^(-lambda)
+  let awayScoreProb = 1 - Math.exp(-awayLambda);
+  let homeScoreProb = 1 - Math.exp(-homeLambda);
+
+  // Adjust for OPPOSING starting pitcher (away team faces home pitcher, vice versa)
+  const pitcherStats = await getPitchersBatch([awayPitcherId, homePitcherId]);
+  const LEAGUE_ERA = 4.00, LEAGUE_K = 0.225;
+
+  if(homePitcherId && pitcherStats[homePitcherId]){
+    const p = pitcherStats[homePitcherId];
+    const eraAdj = Math.max(0.7, Math.min(1.4, (p.seasonERA||LEAGUE_ERA) / LEAGUE_ERA));
+    const kAdj = Math.max(0.7, Math.min(1.3, 1 - ((p.blendedK_pct||LEAGUE_K) - LEAGUE_K) * 2.0));
+    awayScoreProb = Math.max(0.18, Math.min(0.68, awayScoreProb * eraAdj * kAdj));
+  }
+  if(awayPitcherId && pitcherStats[awayPitcherId]){
+    const p = pitcherStats[awayPitcherId];
+    const eraAdj = Math.max(0.7, Math.min(1.4, (p.seasonERA||LEAGUE_ERA) / LEAGUE_ERA));
+    const kAdj = Math.max(0.7, Math.min(1.3, 1 - ((p.blendedK_pct||LEAGUE_K) - LEAGUE_K) * 2.0));
+    homeScoreProb = Math.max(0.18, Math.min(0.68, homeScoreProb * eraAdj * kAdj));
+  }
+
+  // Umpire zone adjustment — tight zone = fewer walks = harder to score
+  const umpire = getUmpireForGame(g.gamePk);
+  if(umpire && Math.abs(umpire.kTendency) >= 0.3){
+    const umpAdj = 1 - (umpire.kTendency / 15); // +1.0 K → -6.7% score prob
+    awayScoreProb = Math.max(0.18, Math.min(0.68, awayScoreProb * umpAdj));
+    homeScoreProb = Math.max(0.18, Math.min(0.68, homeScoreProb * umpAdj));
+  }
+
+  // Weather: cold weather → fewer HRs, harder to score
+  const weather = await getWeather(homeAbbr);
+  if(weather?.temperature < 50){
+    const coldAdj = 0.97 - (50 - weather.temperature) * 0.003;
+    awayScoreProb *= coldAdj; homeScoreProb *= coldAdj;
+  }
+
+  const nrfiProb = (1-awayScoreProb) * (1-homeScoreProb);
+  const yrfiProb = 1 - nrfiProb;
+
+  // Compare to live NRFI odds
+  const nrfiRows = state.liveOdds[NRFI_MARKET] || [];
+  const nrfiRow = nrfiRows.find(r=>
+    (r.away_team && r.away_team.toLowerCase().includes(awayAbbr.toLowerCase())) ||
+    (r.home_team && r.home_team.toLowerCase().includes(homeAbbr.toLowerCase()))
+  );
+  const nrfiImplied = nrfiRow ? (nrfiRow.selection_type==='nrfi' ? nrfiRow.odds_probability : 1-nrfiRow.odds_probability) : null;
+  const nrfiEdge = nrfiImplied !== null ? nrfiProb - nrfiImplied : null;
+  const yrfiEdge = nrfiImplied !== null ? yrfiProb - (1-nrfiImplied) : null;
+
+  return {
+    gamePk: g.gamePk, awayAbbr, homeAbbr,
+    awayPitcherName, homePitcherName,
+    awayRPG: awayRPG.toFixed(2), homeRPG: homeRPG.toFixed(2),
+    awayScoreProb, homeScoreProb,
+    nrfiProb, yrfiProb,
+    nrfiEdge, yrfiEdge,
+    nrfiRow, nrfiImplied,
+    umpire: umpire?.name,
+    direction: nrfiEdge !== null ? (nrfiEdge > 0 ? 'NRFI' : 'YRFI') : null,
+    edge: nrfiEdge !== null ? (nrfiEdge > 0 ? nrfiEdge : yrfiEdge) : null
+  };
+}
+
+async function runNRFIScan(){
+  if(!state.games.length){ alert('No games loaded yet.'); return; }
+  const btn = document.getElementById('nrfiScanBtn');
+  const progressEl = document.getElementById('nrfiScanProgress');
+  btn.disabled = true;
+  progressEl.textContent = `Calculating first-inning probabilities for ${state.games.length} games…`;
+
+  const results = [];
+  await runChunked(state.games, async g=>{
+    const r = await calcNRFIGame(g);
+    if(r) results.push(r);
+  }, 4, (d,t)=>{ progressEl.textContent = `${d}/${t} games…`; });
+
+  // Sort by edge magnitude (best plays first)
+  results.sort((a,b)=> Math.abs(b.edge||0) - Math.abs(a.edge||0));
+  state.nrfiScanResults = results;
+  renderNRFIBoard(results);
+  progressEl.textContent = `Done — ${results.length} games projected.`;
+  btn.disabled = false;
+}
+
+function renderNRFIBoard(results){
+  const hasLines = (state.liveOdds[NRFI_MARKET]||[]).length > 0;
+  const edgeGate = hasLines && document.getElementById('nrfiEdgeGate')?.checked;
+  const gateRow = document.getElementById('nrfiEdgeGateRow');
+  if(gateRow) gateRow.style.display = hasLines ? 'flex' : 'none';
+
+  // Top NRFI plays
+  const topNrfi = results.filter(r=> !edgeGate || (r.nrfiEdge !== null && r.nrfiEdge > 0.03))
+    .sort((a,b)=> b.nrfiProb - a.nrfiProb).slice(0,5);
+  const topYrfi = results.filter(r=> !edgeGate || (r.yrfiEdge !== null && r.yrfiEdge > 0.03))
+    .sort((a,b)=> b.yrfiProb - a.yrfiProb).slice(0,5);
+
+  const nrfiPanel = document.getElementById('nrfiTopNrfi');
+  const yrfiPanel = document.getElementById('nrfiTopYrfi');
+
+  if(topNrfi.length){
+    nrfiPanel.style.display='block';
+    document.getElementById('nrfiNrfiList').innerHTML = topNrfi.map(r=>nrfiRowHTML(r,'NRFI')).join('');
+  }
+  if(topYrfi.length){
+    yrfiPanel.style.display='block';
+    document.getElementById('nrfiYrfiList').innerHTML = topYrfi.map(r=>nrfiRowHTML(r,'YRFI')).join('');
+  }
+
+  // Full board
+  const boardEl = document.getElementById('nrfiFullBoard');
+  if(!results.length){ boardEl.innerHTML='<div class="empty-state">Tap Scan to calculate.</div>'; return; }
+
+  boardEl.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px;font-family:var(--mono);font-size:10px;color:var(--chalk-dim);padding:6px 8px;border-bottom:1px solid var(--line);">
+      <span>Matchup</span><span>NRFI%</span><span>YRFI%</span><span>Pitchers</span><span>Edge</span>
+    </div>
+    ${results.map(r=>{
+      const bestEdge = r.nrfiEdge !== null
+        ? (r.nrfiEdge > r.yrfiEdge ? `NRFI +${(r.nrfiEdge*100).toFixed(1)}pt` : `YRFI +${(r.yrfiEdge*100).toFixed(1)}pt`)
+        : '—';
+      const edgeColor = r.edge && r.edge > 0.04 ? '#7CC68A' : r.edge && r.edge > 0 ? 'var(--mustard)' : 'var(--chalk-dim)';
+      return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px;padding:8px;border-bottom:1px solid var(--line);align-items:center;">
+        <span style="font-weight:700;font-size:12px;">${r.awayAbbr} @ ${r.homeAbbr}</span>
+        <span style="color:${r.nrfiProb>=0.60?'#7CC68A':r.nrfiProb>=0.55?'var(--mustard)':'var(--chalk-dim)'};">${pct(r.nrfiProb)}</span>
+        <span style="color:${r.yrfiProb>=0.50?'var(--clay-2)':'var(--chalk-dim)'};">${pct(r.yrfiProb)}</span>
+        <span style="font-size:10px;color:var(--chalk-dim);">${r.awayPitcherName.split(' ').pop()} vs ${r.homePitcherName.split(' ').pop()}</span>
+        <span style="color:${edgeColor};font-weight:700;">${bestEdge}</span>
+      </div>`;
+    }).join('')}
+    <div class="panel-desc" style="margin-top:8px;">
+      ${hasLines ? 'Edge vs live NRFI/YRFI line. Sorted by edge magnitude.' : 'Load NRFI/YRFI lines above to see edge vs book.'}
+    </div>
+  `;
+}
+
+function nrfiRowHTML(r, side){
+  const prob = side==='NRFI' ? r.nrfiProb : r.yrfiProb;
+  const edge = side==='NRFI' ? r.nrfiEdge : r.yrfiEdge;
+  const color = prob >= 0.65 ? '#7CC68A' : prob >= 0.55 ? 'var(--mustard)' : 'var(--chalk-dim)';
+  const umpNote = r.umpire ? ` · ${r.umpire.split(' ').pop()} umpiring` : '';
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px;border-bottom:1px solid var(--line);">
+      <div>
+        <div style="font-weight:700;font-size:13px;">${r.awayAbbr} @ ${r.homeAbbr}</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--chalk-dim);margin-top:2px;">${r.awayPitcherName} vs ${r.homePitcherName}${umpNote}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--chalk-dim);margin-top:2px;">
+          ${r.awayAbbr} score prob: ${pct(r.awayScoreProb)} · ${r.homeAbbr} score prob: ${pct(r.homeScoreProb)}
+        </div>
+        ${edge !== null ? `<div style="font-family:var(--mono);font-size:10px;color:${edge>=0.04?'#7CC68A':'var(--mustard)'};margin-top:2px;">Edge vs book: ${edge>=0?'+':''}${(edge*100).toFixed(1)}pt</div>` : ''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-family:var(--display);font-size:22px;text-transform:uppercase;color:${color};">${pct(prob)}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:${color};">${side}</div>
+      </div>
+    </div>`;
+}
+
 function wireTabs(){
   document.querySelectorAll('.tab-btn').forEach(btn=>{
     if(btn.disabled) return;
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      ['hr','ks','outs','winners','ou','streak','parlay','lab','tracking','ai','paytab'].forEach(t=>{
+      ['hr','ks','outs','winners','ou','nrfi','streak','parlay','lab','tracking','ai','paytab'].forEach(t=>{
         const el = document.getElementById('tab-'+t);
         if(el) el.style.display = (t === btn.dataset.tab) ? 'block' : 'none';
       });
@@ -6303,6 +6552,7 @@ function wireTabs(){
       if(btn.dataset.tab === 'paytab') renderPTCards();
       if(btn.dataset.tab === 'streak') renderStreakTab();
       if(btn.dataset.tab === 'ai'){ loadKVStats(); renderLocalDiagnostic(); renderCalibrationReport(); }
+      if(btn.dataset.tab === 'nrfi' && state.nrfiScanResults.length) renderNRFIBoard(state.nrfiScanResults);
     });
   });
 }
@@ -6425,6 +6675,10 @@ function init(){
   document.getElementById('ouLoadOddsBtn').addEventListener('click', ()=> loadLiveOdds(TOTAL_MARKET, 'ouOddsStatus').then(()=>{ renderOULeaderboard(state.ouScanResults); }));
   document.getElementById('ouScanBtn').addEventListener('click', runOUScan);
   document.getElementById('ouEdgeGate').addEventListener('change', ()=> renderOULeaderboard(state.ouScanResults));
+
+  document.getElementById('nrfiLoadOddsBtn').addEventListener('click', ()=> loadLiveOdds(NRFI_MARKET, 'nrfiOddsStatus').then(()=>{ if(state.nrfiScanResults.length) renderNRFIBoard(state.nrfiScanResults); }));
+  document.getElementById('nrfiScanBtn').addEventListener('click', runNRFIScan);
+  document.getElementById('nrfiEdgeGate').addEventListener('change', ()=> renderNRFIBoard(state.nrfiScanResults));
 
   // Streak tab
   document.getElementById('streakAutoBuildBtn').addEventListener('click', ()=>{
