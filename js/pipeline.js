@@ -215,10 +215,11 @@ const Pipeline = {
       let liveOptionsData = null;
       let cioScoreTotal   = 0;
 
-      // Try up to 3 candidates — stop when we find one scoring 42+
-      for (let i = 0; i < Math.min(rankedCandidates.length, 3); i++) {
+      // Try up to 3 candidates — stop when we find one projecting 42+
+      const maxTries = Math.min(rankedCandidates.length, 3);
+      for (let i = 0; i < maxTries; i++) {
         const candidate = rankedCandidates[i];
-        AgentUI.setAgentStatus('agent2', 'running', `Analyzing ${candidate.ticker} (${i + 1}/${Math.min(rankedCandidates.length, 3)})...`);
+        AgentUI.setAgentStatus('agent2', 'running', `Analyzing ${candidate.ticker} (${i + 1}/${maxTries})...`);
 
         const [research, liveOpts] = await Promise.all([
           Pipeline.callAgent('agent2', AGENT_PROMPTS.researchAnalyst, {
@@ -240,7 +241,7 @@ const Pipeline = {
         const estRiskScore = 6; // Typical risk score; refined later by actual R/R
         const quickScore  = researchSum + marketScore + macroScore + estRiskScore;
 
-        if (quickScore >= 42 || i === rankedCandidates.length - 1) {
+        if (quickScore >= 42 || i === maxTries - 1) {
           // Projected to clear the 42 threshold, or it's our last option
           topCandidate    = candidate;
           researchResult  = research;
